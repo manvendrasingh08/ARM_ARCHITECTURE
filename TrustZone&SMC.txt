@@ -1,0 +1,465 @@
+# ARM TRUSTZONE + SMC + COMPLETE FLOW (DETAILED NOTES)
+
+---
+
+# 1. WHAT IS TRUSTZONE
+
+TrustZone is a **hardware-based security feature in ARM architecture** that splits the system into two isolated environments:
+
+1. **Normal World (Non-secure)**
+2. **Secure World**
+
+---
+
+## Core Concept
+
+* Same CPU
+* Same hardware
+* Two completely isolated execution environments
+
+---
+
+## Security State
+
+Each operation in the CPU is tagged with a bit:
+
+* NS = 1 → Non-secure (Normal World)
+* NS = 0 → Secure (Secure World)
+
+---
+
+## Key Rule
+
+Applications running in Normal World:
+
+* ALWAYS operate with NS = 1
+* Cannot directly change NS bit
+* Cannot access Secure memory
+
+---
+
+# 2. WHAT IS SMC
+
+SMC = Secure Monitor Call
+
+---
+
+## Definition
+
+SMC is a **special CPU instruction** used to request a transition from:
+
+* Normal World → Secure Monitor (EL3)
+
+---
+
+## Purpose
+
+* Only official gateway into Secure World
+* Controlled and hardware-enforced
+
+---
+
+## Instruction Format
+
+```
+SMC #imm
+```
+
+Example:
+
+```
+SMC #0
+```
+
+---
+
+## Key Property
+
+* Cannot be used directly by applications (EL0)
+* Usually invoked by Kernel (EL1)
+
+---
+
+# 3. SYSTEM LEVEL STRUCTURE
+
+Execution Levels:
+
+```
+EL0 → Application
+EL1 → OS Kernel
+EL3 → Secure Monitor
+Secure EL1 → TEE OS
+```
+
+---
+
+## Worlds Mapping
+
+```
+Normal World:
+    EL0 → Apps
+    EL1 → Linux/Android Kernel
+
+Secure World:
+    Secure EL1 → TEE OS
+    Secure EL0 → Trusted Apps
+```
+
+---
+
+# 4. COMPLETE FLOW (STEP-BY-STEP)
+
+---
+
+## PHASE 1: APPLICATION (EL0)
+
+1. App calls API (e.g., encryption)
+2. Running in EL0
+3. NS = 1 (Non-secure)
+4. Cannot access secure memory or hardware directly
+
+---
+
+## PHASE 2: SYSTEM CALL (SVC)
+
+5. App triggers syscall (SVC instruction)
+6. CPU switches:
+
+   * EL0 → EL1
+   * NS remains 1
+7. Kernel starts executing
+
+---
+
+## PHASE 3: KERNEL PREPARATION
+
+8. Kernel identifies request (e.g., Keystore)
+9. Allocates shared buffer
+10. Writes:
+
+    * Command ID
+    * Parameters
+11. Sets registers:
+
+    * X0 = Function ID
+    * X1 = Buffer pointer
+
+---
+
+## PHASE 4: SMC EXECUTION
+
+12. Kernel executes:
+
+    ```
+    SMC #0
+    ```
+
+---
+
+## CPU HARDWARE ACTIONS
+
+13. Save PC → ELR_EL3
+14. Save PSTATE → SPSR_EL3
+15. Switch EL:
+    EL1 → EL3
+16. Switch security:
+    NS = 1 → NS = 0
+17. Jump to:
+    VBAR_EL3 (SMC handler)
+
+---
+
+## PHASE 5: SECURE MONITOR (EL3)
+
+18. Secure Monitor starts execution
+19. Reads registers (X0, X1, etc.)
+20. Validates request format
+21. Routes request to Secure World (TEE)
+
+---
+
+## PHASE 6: SWITCH TO SECURE WORLD
+
+22. Context switch:
+
+    * Save EL3 context
+    * Load Secure EL1 context
+23. Switch:
+    EL3 → Secure EL1
+24. NS = 0
+25. Jump to TEE OS entry
+
+---
+
+## PHASE 7: TEE OS EXECUTION
+
+26. TEE kernel receives request
+27. Reads shared memory
+28. Identifies Trusted Application (TA)
+
+---
+
+## TRUSTED APPLICATION
+
+29. TA executes:
+
+    * Access secure key
+    * Perform operation
+30. Writes result to shared memory
+
+IMPORTANT:
+
+* Key NEVER leaves secure memory
+
+---
+
+## PHASE 8: RETURN FROM TEE
+
+31. TEE prepares return values (X0, etc.)
+32. Executes:
+
+    ```
+    ERET
+    ```
+
+---
+
+## PHASE 9: RETURN TO NORMAL WORLD
+
+33. CPU restores:
+
+    * PC from ELR_EL3
+    * PSTATE from SPSR_EL3
+34. Switch:
+    EL3 → EL1
+    NS = 0 → NS = 1
+
+---
+
+## PHASE 10: KERNEL FINALIZATION
+
+35. Kernel reads result from buffer
+36. Validates response
+37. Copies data to user space
+
+---
+
+## PHASE 11: RETURN TO APPLICATION
+
+38. CPU switches:
+    EL1 → EL0
+39. App resumes execution
+40. Receives result
+
+---
+
+# 5. IMPORTANT RULES
+
+---
+
+## RULE 1
+
+Application NEVER:
+
+* Enters Secure World
+* Sets NS bit
+* Accesses secure memory
+
+---
+
+## RULE 2
+
+NS bit is:
+
+* Automatically set by CPU
+* Based on current execution state
+
+---
+
+## RULE 3
+
+Only SMC can trigger:
+
+* Secure transition
+
+---
+
+# 6. ACCESS CONTROL (WHO IS ALLOWED?)
+
+Even though ANY app can request a service, NOT all are allowed.
+
+---
+
+# MULTI-LAYER SECURITY MODEL
+
+---
+
+## LAYER 1: ANDROID PERMISSIONS
+
+* App must declare permissions
+* Framework checks:
+
+  * UID
+  * App signature
+
+---
+
+## LAYER 2: ANDROID KEYSTORE
+
+* Controls key usage
+* Keys are bound to:
+
+  * App UID
+  * App signature
+
+Example:
+Key created by App A → Only App A can use it
+
+---
+
+## LAYER 3: KERNEL (UID/GID CONTROL)
+
+* Each app runs with a unique UID
+* Kernel enforces:
+
+  * File permissions
+  * Device access (/dev/tee)
+
+---
+
+## UID / GID DETAILS
+
+* UID = User ID (per app)
+* GID = Group ID
+
+Example:
+
+```
+App A → UID 1001  
+App B → UID 1002  
+```
+
+Kernel ensures:
+App B cannot access App A resources
+
+---
+
+## LAYER 4: SECURE MONITOR
+
+* Validates SMC structure
+* Routes request
+* Does NOT enforce app-level permissions
+
+---
+
+## LAYER 5: TEE OS (CRITICAL)
+
+* Receives caller identity
+* Verifies:
+
+  * Session
+  * Origin
+  * Permissions
+
+---
+
+## LAYER 6: TRUSTED APPLICATION (FINAL AUTHORITY)
+
+* Implements actual policy
+* Checks:
+
+  * Key ownership
+  * App identity
+  * Usage rights
+
+---
+
+## EXAMPLE
+
+App A creates key
+TEE binds key to App A
+
+App B tries to use it:
+
+```
+→ TEE checks identity  
+→ Mismatch  
+→ Rejects ❌  
+```
+
+---
+
+# 7. HOW IDENTITY IS PASSED
+
+---
+
+Identity flows from Normal World to Secure World via:
+
+1. Kernel tagging (UID)
+2. Secure session
+3. Shared memory metadata
+4. Cryptographic binding
+
+---
+
+# 8. HARDWARE ENFORCEMENT
+
+---
+
+## Components
+
+* CPU
+* MMU
+* AXI Bus
+* Memory Controller
+
+---
+
+## Enforcement Rule
+
+If:
+
+```
+NS = 1 AND memory = Secure
+```
+
+Then:
+
+```
+Access denied ❌
+```
+
+---
+
+# 9. FINAL MENTAL MODEL
+
+---
+
+App:
+Requests secure operation
+
+Kernel:
+Prepares and forwards request
+
+SMC:
+Triggers secure transition
+
+Secure Monitor:
+Validates and routes
+
+TEE OS:
+Executes securely
+
+Trusted App:
+Decides permission
+
+---
+
+# FINAL SUMMARY
+
+TrustZone provides hardware-isolated secure execution.
+SMC is the only gateway to enter the secure path.
+Applications never access secure resources directly — all access is mediated through kernel, Secure Monitor, and TEE OS with strict identity and permission checks using UID, signatures, and secure policies.
+
+---
+
