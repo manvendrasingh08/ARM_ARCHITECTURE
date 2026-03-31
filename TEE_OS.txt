@@ -1,0 +1,440 @@
+# TEE OS (TRUSTED EXECUTION ENVIRONMENT OS) – COMPLETE STRUCTURE & INTERNALS
+
+---
+
+# 1. WHAT IS TEE OS
+
+TEE OS = Trusted Execution Environment Operating System
+
+---
+
+## Definition
+
+TEE OS is a **small, secure operating system running in the Secure World (TrustZone)** that executes sensitive operations in isolation from the normal OS (Android/Linux).
+
+---
+
+## Key Properties
+
+* Runs in **Secure EL1**
+* Executes with **NS = 0**
+* Completely isolated from Normal World
+* Cannot be accessed directly by applications
+
+---
+
+## Core Purpose
+
+* Protect sensitive data (keys, credentials)
+* Perform secure computations
+* Enforce strict access control
+
+---
+
+# 2. POSITION IN SYSTEM
+
+---
+
+## Architecture Placement
+
+```
+Normal World:
+    EL0 → Applications
+    EL1 → Linux / Android Kernel
+
+Secure World:
+    Secure EL1 → TEE OS
+    Secure EL0 → Trusted Applications (TAs)
+
+EL3:
+    Secure Monitor (handles switching)
+```
+
+---
+
+## Key Insight
+
+TEE OS is NOT a replacement for Android/Linux
+→ It is a **parallel secure OS**
+
+---
+
+# 3. HOW TEE OS IS DIFFERENT FROM NORMAL OS
+
+---
+
+| Feature        | Normal OS (Linux/Android) | TEE OS            |
+| -------------- | ------------------------- | ----------------- |
+| World          | Non-secure                | Secure            |
+| Size           | Large                     | Very small        |
+| Purpose        | General computing         | Security only     |
+| Access         | Open                      | Highly restricted |
+| Attack Surface | Large                     | Minimal           |
+
+---
+
+## Mental Model
+
+```
+Android = Open City
+TEE OS = Secure Vault
+```
+
+---
+
+# 4. INTERNAL STRUCTURE OF TEE OS
+
+---
+
+## High-Level Layout
+
+```
+┌───────────────────────────────┐
+│          TEE OS Kernel        │
+│                               │
+│  ┌─────────────────────────┐  │
+│  │   Secure Services       │  │
+│  │   (Crypto, Storage)     │  │
+│  └─────────────────────────┘  │
+│                               │
+│  ┌─────────────────────────┐  │
+│  │   Trusted Applications  │  │
+│  └─────────────────────────┘  │
+└───────────────────────────────┘
+```
+
+---
+
+# 5. CORE COMPONENTS
+
+---
+
+## 5.1 TEE KERNEL
+
+---
+
+### Responsibilities
+
+* Process scheduling (for Trusted Apps)
+* Memory management (secure memory)
+* Context switching
+* Interrupt handling (secure interrupts)
+
+---
+
+### Key Features
+
+* Minimal design
+* Highly secure
+* Often microkernel-like
+
+---
+
+## 5.2 SECURE SERVICES
+
+---
+
+### Built-in modules
+
+* Cryptography (AES, RSA, SHA)
+* Key management
+* Secure storage
+* Random number generation
+
+---
+
+### Purpose
+
+Provide reusable secure functionality to Trusted Applications
+
+---
+
+## 5.3 TRUSTED APPLICATIONS (TAs)
+
+---
+
+### Definition
+
+Programs running inside TEE OS (Secure EL0)
+
+---
+
+### Examples
+
+* Keymaster (Android)
+* DRM handler
+* Biometric processing
+
+---
+
+### Properties
+
+* Isolated from each other
+* Cannot access each other's memory
+* Controlled by TEE kernel
+
+---
+
+# 6. MEMORY ARCHITECTURE
+
+---
+
+## Secure Memory Layout
+
+```
+┌───────────────────────────────┐
+│ Secure RAM                    │
+│                               │
+│  TEE OS Kernel               │
+│  Trusted Applications        │
+│  Secure Data (keys, secrets) │
+└───────────────────────────────┘
+```
+
+---
+
+## Important Rule
+
+Normal World:
+Cannot read/write secure memory ❌
+
+---
+
+## Enforced by
+
+* MMU (Memory Management Unit)
+* NS bit
+* Bus fabric (AXI)
+* Memory controller
+
+---
+
+# 7. COMMUNICATION WITH NORMAL WORLD
+
+---
+
+## Mechanism
+
+Communication happens via:
+
+```
+SMC (Secure Monitor Call)
+```
+
+---
+
+## Data Transfer Method
+
+* Shared memory buffer
+* Accessible to both worlds (controlled region)
+
+---
+
+## Flow
+
+```
+Normal World → Kernel → SMC → EL3 → TEE OS
+```
+
+---
+
+# 8. INTERNAL EXECUTION FLOW
+
+---
+
+## Step-by-step inside TEE
+
+1. TEE OS receives request
+2. Reads shared memory
+3. Identifies target Trusted Application
+4. Switches context to TA
+5. TA executes secure logic
+6. Writes result to shared memory
+7. Returns to TEE kernel
+
+---
+
+# 9. CONTEXT SWITCHING INSIDE TEE
+
+---
+
+## Between TEE Kernel and TA
+
+* Save current registers
+* Load TA registers
+* Switch memory context
+
+---
+
+## Isolation Guarantee
+
+Each TA:
+
+* Has its own memory space
+* Cannot access others
+
+---
+
+# 10. ACCESS CONTROL INSIDE TEE
+
+---
+
+## Multi-level checks
+
+---
+
+### LEVEL 1: SESSION VALIDATION
+
+* Each request tied to a session
+* Session must be valid
+
+---
+
+### LEVEL 2: CLIENT IDENTITY
+
+TEE receives:
+
+* UID (from kernel)
+* App identity metadata
+
+---
+
+### LEVEL 3: POLICY CHECK
+
+Trusted App verifies:
+
+* Who is calling?
+* Is caller authorized?
+
+---
+
+## Example
+
+```
+App A creates key → bound to UID_A
+
+App B tries to use key:
+    UID_B ≠ UID_A
+    → Access denied ❌
+```
+
+---
+
+# 11. CRYPTOGRAPHIC BINDING
+
+---
+
+## Keys are tied to:
+
+* App UID
+* App signature
+* Device state
+
+---
+
+## Result
+
+Even if attacker calls TEE:
+
+```
+Without correct identity → rejected
+```
+
+---
+
+# 12. BOOT AND INITIALIZATION
+
+---
+
+## Secure Boot Flow
+
+```
+ROM → Bootloader → Secure Firmware → TEE OS → Normal OS
+```
+
+---
+
+## Key Property
+
+Each stage verifies next stage
+
+---
+
+## TEE OS loaded before Android
+
+---
+
+# 13. HARDWARE SUPPORT
+
+---
+
+## Key elements
+
+* NS bit (Non-secure bit)
+* MMU (separate mappings)
+* AXI bus security tagging
+* CPU exception levels
+
+---
+
+## Enforcement
+
+If NS mismatch:
+
+```
+Access blocked ❌
+```
+
+---
+
+# 14. LIMITATIONS OF TEE OS
+
+---
+
+* Limited resources (small memory)
+* Not suitable for general applications
+* Strict execution constraints
+
+---
+
+# 15. REAL IMPLEMENTATIONS
+
+---
+
+## Common TEE OS
+
+* OP-TEE (open-source)
+* Qualcomm QSEE
+* ARM Trusted Firmware
+
+---
+
+# 16. FINAL MENTAL MODEL
+
+---
+
+TEE OS is:
+
+```
+A minimal secure operating system
+Running in isolated hardware environment
+Executing sensitive operations only
+Enforcing strict identity-based access
+```
+
+---
+
+## Flow Summary
+
+```
+App → Kernel → SMC → EL3 → TEE OS → Trusted App → Result
+```
+
+---
+
+# FINAL SUMMARY
+
+TEE OS is a lightweight, security-focused operating system running in the Secure World of ARM TrustZone. It manages secure memory, executes trusted applications, enforces strict identity and access control, and ensures that sensitive data (like cryptographic keys) never leaves the secure environment while still providing controlled services to the normal world.
+
+---
+
