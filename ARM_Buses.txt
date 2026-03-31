@@ -1,0 +1,510 @@
+# AMBA BUS ARCHITECTURE (AXI, AHB, APB) – COMPLETE STRUCTURE, FLOW & USE CASES
+
+---
+
+# 1. WHAT IS AMBA
+
+AMBA (Advanced Microcontroller Bus Architecture) is a set of **standard communication protocols** defined by ARM that allow different hardware components (CPU, memory, peripherals) to communicate inside a system-on-chip (SoC).
+
+---
+
+## Core Idea
+
+Instead of one bus for everything, AMBA defines a **hierarchical bus system**, where each bus is optimized for a specific purpose.
+
+---
+
+# 2. BUS HIERARCHY (VERY IMPORTANT)
+
+---
+
+## Overall Structure
+
+```
+CPU / GPU / DMA (Masters)
+        │
+        ▼
+      AXI BUS   (High-speed backbone)
+        │
+ ┌──────┴──────┐
+ ▼             ▼
+```
+
+Memory        AXI→AHB Bridge
+│
+▼
+AHB BUS  (System bus)
+│
+AHB→APB Bridge
+│
+▼
+APB BUS  (Peripheral bus)
+│
+┌──────┬──────┬──────┐
+▼      ▼      ▼      ▼
+UART   GPIO   TIMER   I2C
+
+---
+
+## Key Understanding
+
+* AXI handles **high-speed data movement**
+* AHB distributes transactions inside system
+* APB connects **low-speed peripherals**
+
+---
+
+# 3. WHAT IS A BUS (HARDWARE VIEW)
+
+A bus is a combination of:
+
+* Address signals → WHERE to access
+* Data signals → WHAT to transfer
+* Control signals → HOW to transfer
+
+---
+
+## Roles
+
+* MASTER → Initiates transfer (CPU, DMA)
+* SLAVE → Responds (Memory, peripherals)
+
+---
+
+# 4. AXI BUS (HIGH PERFORMANCE BUS)
+
+---
+
+## Purpose
+
+AXI is used for **high-speed, high-bandwidth communication**
+
+---
+
+## Connects
+
+```
+CPU ↔ RAM
+CPU ↔ Cache
+CPU ↔ GPU / DMA
+```
+
+---
+
+## Type of Data
+
+* Large data blocks
+* Burst transfers
+* Parallel transactions
+
+---
+
+## Key Features
+
+* Multiple transactions simultaneously
+* Separate channels for read/write
+* High throughput
+* Out-of-order execution possible
+
+---
+
+## When AXI is used
+
+```
+- Instruction fetch from RAM
+- Large data processing
+- DMA transfers
+```
+
+---
+
+# 5. AHB BUS (SYSTEM BUS)
+
+---
+
+## Purpose
+
+AHB is used for **moderate-speed system communication**
+
+---
+
+## Connects
+
+```
+AXI system ↔ internal system components
+CPU ↔ on-chip SRAM / controllers
+```
+
+---
+
+## Type of Data
+
+* Medium-sized transfers
+* Structured but simpler than AXI
+
+---
+
+## Key Features
+
+* Shared bus
+* One active transaction at a time
+* Uses arbiter for access control
+
+---
+
+## When AHB is used
+
+```
+- Accessing internal memory
+- Communicating with system controllers
+```
+
+---
+
+# 6. APB BUS (PERIPHERAL BUS)
+
+---
+
+## Purpose
+
+APB is used for **low-speed, simple communication**
+
+---
+
+## Connects
+
+```
+AHB → Peripherals
+```
+
+---
+
+## Type of Data
+
+* Small data (register-level)
+* Control operations
+
+---
+
+## Key Features
+
+* Very simple protocol
+* No pipelining
+* Low power consumption
+
+---
+
+## When APB is used
+
+```
+- Configuring UART
+- Reading GPIO
+- Setting timers
+```
+
+---
+
+# 7. BRIDGES (CRITICAL COMPONENT)
+
+---
+
+## Why needed?
+
+Each bus uses a **different protocol**, so direct communication is not possible.
+
+---
+
+## Types
+
+* AXI → AHB Bridge
+* AHB → APB Bridge
+
+---
+
+## Function
+
+* Convert signals and timing
+* Maintain correctness of transfer
+
+---
+
+# 8. COMPLETE DATA FLOW SCENARIOS (VERY IMPORTANT)
+
+---
+
+# SCENARIO 1: CPU READS DATA FROM RAM
+
+---
+
+## Flow
+
+```
+1. CPU wants data
+2. CPU sends address via AXI
+3. AXI routes request to memory controller
+4. Memory controller accesses RAM
+5. Data returned via AXI
+6. CPU receives data
+```
+
+---
+
+## Buses Used
+
+```
+AXI only
+```
+
+---
+
+## Insight
+
+High-speed path → no need for AHB/APB
+
+---
+
+# SCENARIO 2: CPU WRITES TO GPIO (PERIPHERAL)
+
+---
+
+## Flow (STEP-BY-STEP)
+
+```
+1. CPU generates write request (GPIO address)
+2. Request goes to AXI bus
+3. AXI decodes address → identifies peripheral region
+4. AXI → AHB bridge converts request
+5. AHB carries request forward
+6. AHB → APB bridge converts request
+7. APB selects GPIO peripheral (PSEL)
+8. Data written to GPIO register
+9. Peripheral acts (e.g., LED ON)
+```
+
+---
+
+## Buses Used
+
+```
+AXI → AHB → APB
+```
+
+---
+
+## Insight
+
+Low-speed device → routed through hierarchy
+
+---
+
+# SCENARIO 3: CPU READS FROM PERIPHERAL
+
+---
+
+## Flow
+
+```
+1. CPU sends read request
+2. AXI handles initial transfer
+3. Converted to AHB
+4. Converted to APB
+5. Peripheral provides data
+6. Data returns via:
+   APB → AHB → AXI → CPU
+```
+
+---
+
+## Buses Used
+
+```
+AXI → AHB → APB → AHB → AXI
+```
+
+---
+
+## Insight
+
+Bidirectional flow across all buses
+
+---
+
+# SCENARIO 4: DMA TRANSFER (MEMORY TO MEMORY)
+
+---
+
+## Flow
+
+```
+1. DMA becomes master
+2. Sends request on AXI
+3. Reads from source memory
+4. Writes to destination memory
+```
+
+---
+
+## Buses Used
+
+```
+AXI only
+```
+
+---
+
+## Insight
+
+High-speed bulk transfer → AXI dominates
+
+---
+
+# SCENARIO 5: TIMER CONFIGURATION
+
+---
+
+## Flow
+
+```
+1. CPU writes timer register
+2. AXI → AHB → APB
+3. Timer configured
+```
+
+---
+
+## Buses Used
+
+```
+AXI → AHB → APB
+```
+
+---
+
+## Insight
+
+Control operation → APB
+
+---
+
+# 9. ADDRESS DECODING (HOW ROUTING WORKS)
+
+---
+
+## Concept
+
+Each address belongs to a region:
+
+```
+0x0000_0000 → RAM
+0x4000_0000 → Peripheral
+```
+
+---
+
+## Process
+
+```
+1. CPU sends address
+2. Interconnect checks address range
+3. Routes to correct bus/device
+```
+
+---
+
+# 10. SECURITY (TRUSTZONE INTEGRATION)
+
+---
+
+## Each transaction carries:
+
+```
+Address + Data + NS bit
+```
+
+---
+
+## Rule
+
+```
+If NS = 1 and target is secure:
+    → Access blocked ❌
+```
+
+---
+
+## Enforced by
+
+* Interconnect
+* Memory controller
+* Peripheral security logic
+
+---
+
+# 11. WHY MULTIPLE BUSES EXIST
+
+---
+
+## Problem
+
+Different components have different requirements:
+
+---
+
+| Component | Requirement     |
+| --------- | --------------- |
+| CPU       | Very high speed |
+| RAM       | High bandwidth  |
+| UART      | Low speed       |
+| GPIO      | Very simple     |
+
+---
+
+## Solution
+
+Use different buses optimized for each case
+
+---
+
+# 12. FINAL UNDERSTANDING (VERY IMPORTANT)
+
+---
+
+## Roles Summary
+
+```
+AXI:
+    High-speed backbone for large data
+
+AHB:
+    Intermediate system-level routing
+
+APB:
+    Simple interface for peripherals
+```
+
+---
+
+## Complete Mental Model
+
+```
+CPU generates request
+    ↓
+AXI handles high-speed transfer
+    ↓
+AHB distributes inside system
+    ↓
+APB handles peripheral interaction
+    ↓
+Peripheral responds
+    ↓
+Data returns via reverse path
+```
+
+---
+
+# FINAL SUMMARY
+
+AMBA is a hierarchical communication architecture where AXI handles high-performance data transfers, AHB acts as a structured system bus, and APB connects low-speed peripherals. Data flows through these buses via bridges depending on the target device, ensuring efficient, scalable, and optimized communication across the entire ARM-based system.
+
+---
+
