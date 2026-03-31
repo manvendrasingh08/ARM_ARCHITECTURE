@@ -1,0 +1,308 @@
+# AXI vs CHI – SIDE-BY-SIDE FLOW (DETAILED COMPARISON)
+
+---
+
+# 1. CORE DIFFERENCE (LOCK THIS FIRST)
+
+AXI:
+Moves data from point A → point B
+
+CHI:
+Ensures correct data is moved AND all caches remain consistent
+
+---
+
+# 2. SYSTEM SETUP (COMMON SCENARIO)
+
+We consider:
+
+```
+- Core 1 (wants data)
+- Core 2 (may already have data in cache)
+- Memory (RAM)
+```
+
+---
+
+# 3. SCENARIO: CORE 1 READS DATA (SIDE-BY-SIDE FLOW)
+
+---
+
+## 🔵 AXI FLOW (NO COHERENCY)
+
+---
+
+Step 1:
+Core 1 sends read request (AXI)
+
+Step 2:
+AXI sends address → Memory controller
+
+Step 3:
+Memory controller reads from RAM
+
+Step 4:
+Data returned to Core 1 via AXI
+
+---
+
+## ❗ Problem
+
+If Core 2 has updated data in cache:
+
+```
+AXI DOES NOT CHECK ❌
+```
+
+Result:
+
+```
+Core 1 gets OLD data ❌
+Core 2 has NEW data ✅
+```
+
+---
+
+## 🔴 AXI SUMMARY
+
+```
+No cache checking
+No coordination between cores
+Only raw data movement
+```
+
+---
+
+# 🟢 CHI FLOW (WITH COHERENCY)
+
+---
+
+Step 1:
+Core 1 sends request → Request Node (RN)
+
+Step 2:
+Request sent into CHI network (packet)
+
+Step 3:
+Home Node (HN) receives request
+
+Step 4:
+HN checks:
+“Does any core have this data?”
+
+Step 5:
+Snooping:
+CHI queries other cores (including Core 2)
+
+Step 6:
+Core 2 responds:
+“I have updated data”
+
+Step 7:
+Data transferred:
+Core 2 → Core 1
+
+Step 8:
+Cache state updates:
+- Core 1 cache updated
+- Core 2 cache adjusted (shared/invalid)
+
+---
+
+## ✅ Result
+
+```
+All cores see consistent data ✅
+```
+
+---
+
+# 4. SIDE-BY-SIDE VISUAL FLOW
+
+---
+
+AXI:
+
+```
+Core 1 → AXI → Memory → AXI → Core 1
+```
+
+CHI:
+
+```
+Core 1 → RN → CHI Network → HN
+                         ↓
+                    Snoops other cores
+                         ↓
+             Core 2 → sends correct data
+                         ↓
+                Data returned to Core 1
+```
+
+---
+
+# 5. WHAT CHI DOES DIFFERENT (VERY IMPORTANT)
+
+---
+
+## 🔥 Difference 1: Cache Awareness
+
+AXI:
+Blind to caches ❌
+
+CHI:
+Fully aware of all caches ✅
+
+---
+
+## 🔥 Difference 2: Data Source
+
+AXI:
+Always from memory
+
+CHI:
+From:
+- Another core cache
+- OR memory
+
+---
+
+## 🔥 Difference 3: Extra Step (SNOOPING)
+
+AXI:
+No snooping ❌
+
+CHI:
+Snoops all relevant caches ✅
+
+---
+
+## 🔥 Difference 4: Data Correctness
+
+AXI:
+May return stale data ❌
+
+CHI:
+Guarantees latest data ✅
+
+---
+
+## 🔥 Difference 5: Structure
+
+AXI:
+Bus-based channels
+
+CHI:
+Packet-based network
+
+---
+
+# 6. WRITE SCENARIO (IMPORTANT)
+
+---
+
+## AXI WRITE
+
+```
+Core 1 → AXI → Memory updated
+```
+
+BUT:
+
+```
+Other cores may still have old cached copy ❌
+```
+
+---
+
+## CHI WRITE
+
+Step 1:
+Core 1 sends write request
+
+Step 2:
+CHI identifies affected caches
+
+Step 3:
+Invalidates or updates other cores
+
+Step 4:
+Writes data
+
+---
+
+Result:
+
+```
+No stale copies anywhere ✅
+```
+
+---
+
+# 7. REAL SYSTEM BEHAVIOR
+
+---
+
+## AXI SYSTEM
+
+```
+Good for:
+    - Single core
+    - Simple systems
+    - No shared cache complexity
+```
+
+---
+
+## CHI SYSTEM
+
+```
+Required for:
+    - Multi-core CPUs
+    - Shared memory systems
+    - High-performance computing
+```
+
+---
+
+# 8. FINAL SIDE-BY-SIDE TABLE
+
+---
+
+| Feature            | AXI         | CHI             |
+| ------------------ | ----------- | --------------- |
+| Type               | Bus         | Network         |
+| Cache awareness    | No          | Yes             |
+| Snooping           | No          | Yes             |
+| Data source        | Memory only | Memory + caches |
+| Multi-core support | Limited     | Full            |
+| Complexity         | Medium      | High            |
+
+---
+
+# 9. FINAL MENTAL MODEL
+
+---
+
+AXI:
+
+```
+“Go to memory and bring data”
+```
+
+CHI:
+
+```
+“Find the correct data anywhere (cache or memory),
+ ensure everyone stays consistent,
+ then deliver it”
+```
+
+---
+
+# FINAL SUMMARY
+
+AXI is a high-speed data transport mechanism that moves data between components without considering cache states, whereas CHI is a coherent interconnect protocol that adds intelligence by tracking cache ownership, performing snooping, maintaining consistency across cores, and ensuring that the most up-to-date data is always delivered.
+
+---
+
